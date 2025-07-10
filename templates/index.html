@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>XML Data Extractor</title>
+</head>
+<body>
+    <h2>Upload Archive File and Result Files</h2>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <p style="color:red;">{{ messages[0] }}</p>
+      {% endif %}
+    {% endwith %}
+
+    <form method="post" enctype="multipart/form-data">
+        <label>Archive XML File:</label><br>
+        <input type="file" name="archive" accept=".xml" required><br><br>
+
+        <label>Result XML Files (multiple):</label><br>
+        <input type="file" name="results" accept=".xml" multiple required><br><br>
+
+        <label>Select Format:</label><br>
+        <select name="format" required>
+            <option value="csv">CSV</option>
+            <option value="xlsx">Excel (.xlsx)</option>
+        </select><br><br>
+
+        <button type="submit">Process and Download</button>
+    </form>
+</body>
+</html>
