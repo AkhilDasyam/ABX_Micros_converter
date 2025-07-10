@@ -1,31 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>XML Data Extractor</title>
+    <meta charset="UTF-8">
+    <title>ABX Micros - XML Data Extractor</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: #f2f6fc;
+            font-family: 'Segoe UI', sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin-top: 80px;
+            padding: 30px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        h2 {
+            margin-bottom: 30px;
+            font-weight: 600;
+        }
+        .form-control, .form-select {
+            border-radius: 8px;
+        }
+        .btn-primary {
+            border-radius: 8px;
+            padding: 10px 25px;
+            font-weight: 500;
+        }
+    </style>
 </head>
 <body>
-    <h2>Upload Archive File and Result Files</h2>
+    <div class="container">
+        <h2 class="text-center">ABX Micros - XML Data Extractor 📄</h2>
+        <form action="/process" method="post" enctype="multipart/form-data">
+            <div class="mb-3">
+                <label for="archive" class="form-label">Upload Archive XML File:</label>
+                <input type="file" name="archive" id="archive" class="form-control" required>
+            </div>
 
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <p style="color:red;">{{ messages[0] }}</p>
-      {% endif %}
-    {% endwith %}
+            <div class="mb-3">
+                <label for="result_folder" class="form-label">Upload Result XML Files (Multiple):</label>
+                <input type="file" name="result_folder" id="result_folder" class="form-control" multiple required>
+            </div>
 
-    <form method="post" enctype="multipart/form-data">
-        <label>Archive XML File:</label><br>
-        <input type="file" name="archive" accept=".xml" required><br><br>
+            <div class="mb-4">
+                <label for="format" class="form-label">Select Output Format:</label>
+                <select name="format" id="format" class="form-select">
+                    <option value="csv">CSV (.csv)</option>
+                    <option value="xlsx">Excel (.xlsx)</option>
+                </select>
+            </div>
 
-        <label>Result XML Files (multiple):</label><br>
-        <input type="file" name="results" accept=".xml" multiple required><br><br>
-
-        <label>Select Format:</label><br>
-        <select name="format" required>
-            <option value="csv">CSV</option>
-            <option value="xlsx">Excel (.xlsx)</option>
-        </select><br><br>
-
-        <button type="submit">Process and Download</button>
-    </form>
+            <div class="text-center">
+                <button type="submit" class="btn btn-primary">Download File</button>
+            </div>
+        </form>
+    </div>
 </body>
 </html>
