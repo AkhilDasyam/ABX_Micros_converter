@@ -1,14 +1,4 @@
-import os
-import tarfile
-import xml.etree.ElementTree as ET
-import pandas as pd
-from flask import Flask, render_template, send_file, request, redirect, url_for, flash
-
-import tempfile
-from datetime import datetime
-
-app = Flask(__name__)
-app.secret_key = 'supersecretkey'  # For flashing messages
+from flask import Flask, render_template, send_file, request, redirect, url_for, flash, make_response
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -28,7 +18,6 @@ def index():
             os.makedirs(extract_dir, exist_ok=True)
 
             try:
-                # Extract .tar archive
                 with tarfile.open(tar_path) as tar:
                     tar.extractall(path=extract_dir)
 
@@ -52,39 +41,33 @@ def index():
 
                     filepath = os.path.join(extract_dir, filename)
                     if not os.path.exists(filepath):
-                        print(f"Missing result file: {filename}")
                         continue
 
-                    try:
-                        sample_tree = ET.parse(filepath)
-                        sample_root = sample_tree.getroot()
+                    sample_tree = ET.parse(filepath)
+                    sample_root = sample_tree.getroot()
 
-                        record = {
-                            'File': filename,
-                            'SampleID': '',
-                            'AnalysisDate': ''
-                        }
+                    record = {
+                        'File': filename,
+                        'SampleID': '',
+                        'AnalysisDate': ''
+                    }
 
-                        sample_id = sample_root.find(".//st[@n='FIELD_SID_SAMPLE_ID']")
-                        analysis_date = sample_root.find(".//dt[@n='ANALYSIS_DATE']")
-                        if sample_id is not None and sample_id.text:
-                            record['SampleID'] = sample_id.text.strip()
-                        if analysis_date is not None and analysis_date.text:
-                            record['AnalysisDate'] = analysis_date.text.strip()
+                    sample_id = sample_root.find(".//st[@n='FIELD_SID_SAMPLE_ID']")
+                    analysis_date = sample_root.find(".//dt[@n='ANALYSIS_DATE']")
+                    if sample_id is not None and sample_id.text:
+                        record['SampleID'] = sample_id.text.strip()
+                    if analysis_date is not None and analysis_date.text:
+                        record['AnalysisDate'] = analysis_date.text.strip()
 
-                        for param_node in sample_root.findall(".//o[@t='SampleParameterResult']"):
-                            param_id_el = param_node.find("st[@n='Id']")
-                            value_el = param_node.find("d[@n='Value']")
-                            if param_id_el is not None and value_el is not None:
-                                param_id = param_id_el.text.strip()
-                                value = value_el.text.strip()
-                                record[param_id] = value
+                    for param_node in sample_root.findall(".//o[@t='SampleParameterResult']"):
+                        param_id_el = param_node.find("st[@n='Id']")
+                        value_el = param_node.find("d[@n='Value']")
+                        if param_id_el is not None and value_el is not None:
+                            param_id = param_id_el.text.strip()
+                            value = value_el.text.strip()
+                            record[param_id] = value
 
-                        records.append(record)
-
-                    except Exception as e:
-                        print(f"Error processing {filename}: {e}")
-                        continue
+                    records.append(record)
 
                 if not records:
                     flash("No valid data records found in the archive.")
@@ -92,7 +75,6 @@ def index():
 
                 df = pd.DataFrame(records)
 
-                # Save with timestamp in filename
                 timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
                 output_filename = f"extracted_data_{timestamp}.{output_format}"
                 output_path = os.path.join(os.getcwd(), output_filename)
@@ -102,21 +84,16 @@ def index():
                 else:
                     df.to_excel(output_path, index=False, engine='openpyxl')
 
-                # Redirect to success page showing the saved path
-                return redirect(url_for("success", file_path=output_path))
+                # Send file as attachment (download) with appropriate headers
+                return send_file(
+                    output_path,
+                    as_attachment=True,
+                    attachment_filename=output_filename,
+                    mimetype='application/octet-stream'
+                )
 
             except Exception as e:
                 flash(f"An unexpected error occurred: {e}")
                 return redirect(url_for("index"))
 
     return render_template("index.html")
-
-
-@app.route("/success")
-def success():
-    file_path = request.args.get('file_path')
-    return render_template("success.html", file_path=file_path)
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
