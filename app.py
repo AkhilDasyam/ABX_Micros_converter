@@ -1,96 +1,122 @@
 import os
-import uuid
+import tarfile
 import xml.etree.ElementTree as ET
 import pandas as pd
-from flask import Flask, render_template, request, send_file, redirect, url_for, flash
+from flask import Flask, render_template, send_file, request, redirect, url_for, flash
+
+import tempfile
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key'
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+app.secret_key = 'supersecretkey'  # For flashing messages
 
-@app.route('/', methods=['GET', 'POST'])
+@app.route("/", methods=["GET", "POST"])
 def index():
-    if request.method == 'POST':
-        archive_file = request.files.get('archive')
-        result_files = request.files.getlist('results')
-        output_format = request.form.get('format')
+    if request.method == "POST":
+        tar_file = request.files.get("tar_file")
+        output_format = request.form.get("output_format")
 
-        if not archive_file or not result_files:
-            flash("Please upload both the archive XML file and result XML files.")
-            return redirect(url_for('index'))
+        if not tar_file or output_format not in ["csv", "xlsx"]:
+            flash("Please upload a .tar file and select an output format.")
+            return redirect(url_for("index"))
 
-        session_id = str(uuid.uuid4())
-        session_folder = os.path.join(UPLOAD_FOLDER, session_id)
-        os.makedirs(session_folder, exist_ok=True)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            tar_path = os.path.join(temp_dir, "archive.tar")
+            tar_file.save(tar_path)
 
-        # Save archive file
-        archive_path = os.path.join(session_folder, archive_file.filename)
-        archive_file.save(archive_path)
+            extract_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
 
-        # Save result files
-        result_filenames = []
-        for file in result_files:
-            save_path = os.path.join(session_folder, file.filename)
-            file.save(save_path)
-            result_filenames.append(file.filename)
+            try:
+                # Extract .tar archive
+                with tarfile.open(tar_path) as tar:
+                    tar.extractall(path=extract_dir)
 
-        try:
-            df = extract_data(archive_path, session_folder, result_filenames)
-            output_path = os.path.join(session_folder, f"output.{output_format}")
-            if output_format == "csv":
-                df.to_csv(output_path, index=False)
-            else:
-                df.to_excel(output_path, index=False)
-            return send_file(output_path, as_attachment=True)
-        except Exception as e:
-            flash(f"Processing failed: {e}")
-            return redirect(url_for('index'))
+                archive_file = next(
+                    (f for f in os.listdir(extract_dir) if f.startswith('ar-') and f.endswith('.xml')),
+                    None
+                )
+                if not archive_file:
+                    flash("No archive XML file starting with 'ar-' found.")
+                    return redirect(url_for("index"))
 
-    return render_template('index.html')
+                archive_path = os.path.join(extract_dir, archive_file)
+                tree = ET.parse(archive_path)
+                root = tree.getroot()
+                result_files = [res.attrib['file'] for res in root.find('results')]
 
-def extract_data(archive_file, results_folder, available_files):
-    tree = ET.parse(archive_file)
-    root = tree.getroot()
-    result_files = [res.attrib['file'] for res in root.find('results')]
+                records = []
+                for filename in result_files:
+                    if not filename.endswith('.xml'):
+                        continue
 
-    records = []
-    for filename in result_files:
-        if filename not in available_files:
-            continue  # Skip missing files
+                    filepath = os.path.join(extract_dir, filename)
+                    if not os.path.exists(filepath):
+                        print(f"Missing result file: {filename}")
+                        continue
 
-        filepath = os.path.join(results_folder, filename)
-        try:
-            tree = ET.parse(filepath)
-            sample_root = tree.getroot()
+                    try:
+                        sample_tree = ET.parse(filepath)
+                        sample_root = sample_tree.getroot()
 
-            record = {
-                'File': filename,
-                'SampleID': '',
-                'AnalysisDate': ''
-            }
+                        record = {
+                            'File': filename,
+                            'SampleID': '',
+                            'AnalysisDate': ''
+                        }
 
-            sample_id = sample_root.find(".//st[@n='FIELD_SID_SAMPLE_ID']")
-            analysis_date = sample_root.find(".//dt[@n='ANALYSIS_DATE']")
-            if sample_id is not None and sample_id.text:
-                record['SampleID'] = sample_id.text.strip()
-            if analysis_date is not None and analysis_date.text:
-                record['AnalysisDate'] = analysis_date.text.strip()
+                        sample_id = sample_root.find(".//st[@n='FIELD_SID_SAMPLE_ID']")
+                        analysis_date = sample_root.find(".//dt[@n='ANALYSIS_DATE']")
+                        if sample_id is not None and sample_id.text:
+                            record['SampleID'] = sample_id.text.strip()
+                        if analysis_date is not None and analysis_date.text:
+                            record['AnalysisDate'] = analysis_date.text.strip()
 
-            for param_node in sample_root.findall(".//o[@t='SampleParameterResult']"):
-                param_id_el = param_node.find("st[@n='Id']")
-                value_el = param_node.find("d[@n='Value']")
-                if param_id_el is not None and value_el is not None:
-                    param_id = param_id_el.text.strip()
-                    value = value_el.text.strip()
-                    record[param_id] = value
+                        for param_node in sample_root.findall(".//o[@t='SampleParameterResult']"):
+                            param_id_el = param_node.find("st[@n='Id']")
+                            value_el = param_node.find("d[@n='Value']")
+                            if param_id_el is not None and value_el is not None:
+                                param_id = param_id_el.text.strip()
+                                value = value_el.text.strip()
+                                record[param_id] = value
 
-            records.append(record)
+                        records.append(record)
 
-        except Exception as e:
-            print(f"Error processing {filename}: {e}")
+                    except Exception as e:
+                        print(f"Error processing {filename}: {e}")
+                        continue
 
-    return pd.DataFrame(records)
+                if not records:
+                    flash("No valid data records found in the archive.")
+                    return redirect(url_for("index"))
 
-if __name__ == '__main__':
-    app.run(debug=True)
+                df = pd.DataFrame(records)
+
+                # Save with timestamp in filename
+                timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                output_filename = f"extracted_data_{timestamp}.{output_format}"
+                output_path = os.path.join(os.getcwd(), output_filename)
+
+                if output_format == "csv":
+                    df.to_csv(output_path, index=False)
+                else:
+                    df.to_excel(output_path, index=False, engine='openpyxl')
+
+                # Redirect to success page showing the saved path
+                return redirect(url_for("success", file_path=output_path))
+
+            except Exception as e:
+                flash(f"An unexpected error occurred: {e}")
+                return redirect(url_for("index"))
+
+    return render_template("index.html")
+
+
+@app.route("/success")
+def success():
+    file_path = request.args.get('file_path')
+    return render_template("success.html", file_path=file_path)
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
