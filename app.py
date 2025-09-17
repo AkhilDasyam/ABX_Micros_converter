@@ -2,6 +2,10 @@ from flask import Flask, request, send_file, render_template, flash, redirect, u
 import pandas as pd
 import tempfile
 import os
+import tarfile  # <- Add this line
+import xml.etree.ElementTree as ET  # If you process XML files
+from datetime import datetime  # If you use timestamps for filenames
+
 app = Flask(__name__) 
 
 app.secret_key = 'your_secret_key'
