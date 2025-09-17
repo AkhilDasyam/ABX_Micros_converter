@@ -95,11 +95,11 @@ def index():
 
                 # Send file as attachment (download) with appropriate headers
                 return send_file(
-                    output_path,
-                    as_attachment=True,
-                    attachment_filename=output_filename,
-                    mimetype='application/octet-stream'
-                )
+    output_file,
+    as_attachment=True,
+    download_name=f"extracted_data.{output_format}"
+)
+
 
             except Exception as e:
                 flash(f"An unexpected error occurred: {e}")
