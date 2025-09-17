@@ -97,3 +97,14 @@ def index():
                 return redirect(url_for("index"))
 
     return render_template("index.html")
+
+
+@app.route("/success")
+def success():
+    file_path = request.args.get('file_path')
+    return render_template("success.html", file_path=file_path)
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
+
