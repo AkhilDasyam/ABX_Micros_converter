@@ -95,9 +95,9 @@ def index():
 
                 # Send file as attachment (download) with appropriate headers
                 return send_file(
-    output_file,
+    output_path,
     as_attachment=True,
-    download_name=f"extracted_data.{output_format}"
+    download_name=output_filename
 )
 
 
